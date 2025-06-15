@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
+import json
 
 class WhisperProcessor:
     def __init__(self, output_dir: str = "output"):
@@ -20,53 +21,21 @@ class WhisperProcessor:
             with open(audio_file, "rb") as audio:
                 # Whisper APIを使用して文字起こし
                 transcript = self.client.audio.transcriptions.create(
-                    model="whisper-1",
+                    model="gpt-4o-transcribe",
                     file=audio,
-                    response_format="srt"
+                    response_format="json"
                 )
 
             # Save the SRT content to a file
             # TODO: この SRT ファイルの出力時点で、句切れのない SRT ファイルになっている
-            srt_output_path = os.path.join(self.output_dir, f"{os.path.splitext(os.path.basename(audio_file))[0]}-1.srt")
-            with open(srt_output_path, "w", encoding="utf-8") as f:
-                f.write(transcript)
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(transcript.to_dict(), f, ensure_ascii=False, indent=2)
 
-            print(f"SRT file saved to: {srt_output_path}")
+            print(f"JSON file saved to: {output_file}")
 
         except Exception as e:
             print(f"Error processing audio file {audio_file}: {e}")
 
-    def _create_textgrid(self, transcript) -> str:
-        """Create TextGrid content from Whisper transcript."""
-        # TextGridのヘッダー部分
-        textgrid = """File type = "ooTextFile"
-Object class = "TextGrid"
-
-xmin = 0
-xmax = {duration}
-tiers? <exists>
-size = 1
-item []:
-    item [1]:
-        class = "IntervalTier"
-        name = "transcript"
-        xmin = 0
-        xmax = {duration}
-        intervals: size = {num_segments}
-""".format(
-            duration=transcript.duration,
-            num_segments=len(transcript.segments)
-        )
-
-        # 各セグメントをTextGrid形式に変換
-        for i, segment in enumerate(transcript.segments, 1):
-            textgrid += f"""        intervals [{i}]:
-            xmin = {segment.start}
-            xmax = {segment.end}
-            text = "{segment.text}"
-"""
-
-        return textgrid
 
     def process_directory(self, input_dir: Path, output_dir: Path) -> None:
         """Process all WAV files in a directory."""
